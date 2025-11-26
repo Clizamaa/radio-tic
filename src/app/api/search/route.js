@@ -31,18 +31,20 @@ export async function GET(req) {
     );
   }
   const data = await res.json();
-  const items = (data.items || []).map((item) => {
-    const vid = item.id?.videoId;
-    const sn = item.snippet || {};
-    const thumbs = sn.thumbnails || {};
-    const thumb = thumbs.medium?.url || thumbs.default?.url || "";
-    return {
-      videoId: vid,
-      title: sn.title,
-      channel: sn.channelTitle,
-      thumbnailUrl: thumb,
-    };
-  });
+  const items = (data.items || [])
+    .filter((item) => item?.id?.videoId)
+    .map((item) => {
+      const vid = item.id?.videoId;
+      const sn = item.snippet || {};
+      const thumbs = sn.thumbnails || {};
+      const thumb = thumbs.medium?.url || thumbs.default?.url || "";
+      return {
+        videoId: vid,
+        title: sn.title,
+        channel: sn.channelTitle,
+        thumbnailUrl: thumb,
+      };
+    });
   return NextResponse.json({ results: items });
 }
 
