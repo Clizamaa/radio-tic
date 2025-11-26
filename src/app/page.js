@@ -43,8 +43,10 @@ export default function Home() {
   const [results, setResults] = useState([]);
   const [queue, setQueue] = useState([]);
   const [nowPlaying, setNowPlaying] = useState(null);
+  const [startedAt, setStartedAt] = useState(null);
   const playerRef = useRef(null);
   const ytReadyRef = useRef(false);
+  const currentVidRef = useRef(null);
   const [playerState, setPlayerState] = useState("idle");
 
   useEffect(() => {
@@ -55,12 +57,29 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (playerRef.current && nowPlaying?.videoId) {
-      try {
-        playerRef.current.loadVideoById(nowPlaying.videoId);
-      } catch {}
-    }
-  }, [nowPlaying]);
+    const id = setInterval(() => {
+      refreshState();
+    }, 10000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const vid = nowPlaying?.videoId;
+    if (!playerRef.current || !vid) return;
+    if (currentVidRef.current === vid) return;
+    try {
+      playerRef.current.loadVideoById(vid);
+      currentVidRef.current = vid;
+      const t0 = typeof startedAt === "number" ? startedAt : null;
+      if (t0) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - t0) / 1000));
+        try {
+          playerRef.current.playVideo();
+          playerRef.current.seekTo(elapsed, true);
+        } catch {}
+      }
+    } catch {}
+  }, [nowPlaying?.videoId, startedAt]);
 
   function loadYouTubeApi() {
     if (typeof window === "undefined") return;
@@ -97,8 +116,15 @@ export default function Home() {
     const res = await fetch("/api/queue");
     if (res.ok) {
       const data = await res.json();
-      setQueue(data.queue || []);
-      setNowPlaying(data.nowPlaying || null);
+      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
+        setQueue(data.queue);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
+        setNowPlaying(data.nowPlaying);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
+        setStartedAt(data.startedAt);
+      }
     }
   }
 
@@ -126,8 +152,15 @@ export default function Home() {
     });
     if (res.ok) {
       const data = await res.json();
-      setQueue(data.queue || []);
-      setNowPlaying(data.nowPlaying || null);
+      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
+        setQueue(data.queue);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
+        setNowPlaying(data.nowPlaying);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
+        setStartedAt(data.startedAt);
+      }
     }
   }
 
@@ -135,8 +168,15 @@ export default function Home() {
     const res = await fetch("/api/queue/advance", { method: "POST" });
     if (res.ok) {
       const data = await res.json();
-      setQueue(data.queue || []);
-      setNowPlaying(data.nowPlaying || null);
+      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
+        setQueue(data.queue);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
+        setNowPlaying(data.nowPlaying);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
+        setStartedAt(data.startedAt);
+      }
     }
   }
 
@@ -144,8 +184,15 @@ export default function Home() {
     const res = await fetch("/api/queue/previous", { method: "POST" });
     if (res.ok) {
       const data = await res.json();
-      setQueue(data.queue || []);
-      setNowPlaying(data.nowPlaying || null);
+      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
+        setQueue(data.queue);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
+        setNowPlaying(data.nowPlaying);
+      }
+      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
+        setStartedAt(data.startedAt);
+      }
     }
   }
 
@@ -208,15 +255,17 @@ export default function Home() {
 
         <section className="mt-8">
           <h2 className="text-xl font-semibold">Resultados</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
             {results.map((r) => (
-              <div key={r.videoId} className="flex items-center gap-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
-                <img src={r.thumbnailUrl} alt="thumb" className="h-14 w-24 rounded object-cover" />
-                <div className="flex-1">
+              <div key={r.videoId} className="rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+                <div className="relative w-full overflow-hidden rounded" style={{ aspectRatio: "16 / 9" }}>
+                  <img src={r.thumbnailUrl} alt="thumb" className="absolute inset-0 h-full w-full object-cover" />
+                </div>
+                <div className="mt-2">
                   <div className="text-sm font-medium">{r.title}</div>
                   <div className="text-xs opacity-60">{r.channel}</div>
                 </div>
-                <button onClick={() => request(r)} className="rounded-md bg-green-600 px-3 py-2 text-sm text-white">
+                <button onClick={() => request(r)} className="mt-2 w-full rounded-md bg-green-600 px-3 py-2 text-sm text-white">
                   Solicitar
                 </button>
               </div>
@@ -229,10 +278,15 @@ export default function Home() {
             <h2 className="text-xl font-semibold">En reproducción</h2>
             <div className="mt-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
               {nowPlaying ? (
-                <div className="space-y-2">
-                  <div className="text-sm font-medium">{nowPlaying.title}</div>
-                  <div className="text-xs opacity-60">Solicitado por {nowPlaying.nickname}</div>
-                  <div className={`mt-2 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <img src={nowPlaying.thumbnailUrl} alt="carátula" className="h-16 w-28 rounded object-cover" />
+                    <div className="flex-1">
+                      <div className="text-base font-semibold">{nowPlaying.title}</div>
+                      <div className="text-xs opacity-60">Solicitado por {nowPlaying.nickname}</div>
+                    </div>
+                  </div>
+                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
                     playerState === "playing"
                       ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                       : playerState === "paused"

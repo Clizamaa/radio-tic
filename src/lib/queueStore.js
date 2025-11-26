@@ -1,9 +1,16 @@
-let queue = [];
-let nowPlaying = null;
-let history = [];
+const g = globalThis;
+if (!g.__radioQueue) {
+  g.__radioQueue = {
+    queue: [],
+    nowPlaying: null,
+    history: [],
+    startedAt: null,
+  };
+}
+let { queue, nowPlaying, history, startedAt } = g.__radioQueue;
 
 export function getState() {
-  return { nowPlaying, queue, history };
+  return { nowPlaying, queue, history, startedAt };
 }
 
 export function addRequest({ nickname, videoId, title, thumbnailUrl }) {
@@ -17,9 +24,11 @@ export function addRequest({ nickname, videoId, title, thumbnailUrl }) {
   };
   if (!nowPlaying) {
     nowPlaying = item;
+    startedAt = Date.now();
   } else {
     queue.push(item);
   }
+  g.__radioQueue = { queue, nowPlaying, history, startedAt };
   return getState();
 }
 
@@ -29,9 +38,12 @@ export function advance() {
   }
   if (queue.length > 0) {
     nowPlaying = queue.shift();
+    startedAt = Date.now();
   } else {
     nowPlaying = null;
+    startedAt = null;
   }
+  g.__radioQueue = { queue, nowPlaying, history, startedAt };
   return getState();
 }
 
@@ -43,5 +55,7 @@ export function previous() {
     queue.unshift(nowPlaying);
   }
   nowPlaying = history.pop();
+  startedAt = Date.now();
+  g.__radioQueue = { queue, nowPlaying, history, startedAt };
   return getState();
 }
