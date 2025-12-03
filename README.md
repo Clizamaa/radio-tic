@@ -20,6 +20,21 @@ You can start editing the page by modifying `app/page.js`. The page auto-updates
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Configuración de entorno (YouTube API)
+
+Para que el buscador de YouTube funcione en `dev`, `build` y `start`, debes configurar la variable de entorno `YOUTUBE_API_KEY`.
+
+1. Crea un archivo `.env.local` en la raíz del proyecto.
+2. Copia desde `.env.example` y coloca tu clave real: `YOUTUBE_API_KEY=...`.
+3. La clave debe ser válida y con restricciones de API adecuadas (por ejemplo, restricciones por Referer o IP). Si restringes por Referer, asegúrate de incluir el dominio donde desplegas (ej. `http://localhost:3000` en local y tu dominio en producción).
+
+Notas importantes:
+- Esta clave se usa sólo en el servidor (API route en `src/app/api/search/route.js`). No la expongas como `NEXT_PUBLIC_`.
+- Al ejecutar `next build` y luego `next start`, la variable debe estar disponible en el entorno del proceso de `start`.
+- En Vercel u otro hosting, configura `YOUTUBE_API_KEY` en las variables de proyecto (Production/Preview/Development) en el panel.
+
+Si la clave no está configurada, el endpoint devolverá un error y la UI mostrará un mensaje indicando el problema.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

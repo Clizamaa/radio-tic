@@ -22,6 +22,13 @@ export function addRequest({ nickname, videoId, title, thumbnailUrl }) {
     nickname,
     createdAt: new Date().toISOString(),
   };
+  // Regla de negocio: evitar solicitudes consecutivas de la misma canción
+  const lastVideoId = queue.length > 0 ? queue[queue.length - 1]?.videoId : nowPlaying?.videoId;
+  if (lastVideoId && lastVideoId === videoId) {
+    // No alteramos el estado; simplemente devolvemos el actual
+    g.__radioQueue = { queue, nowPlaying, history, startedAt };
+    return getState();
+  }
   if (!nowPlaying) {
     nowPlaying = item;
     startedAt = Date.now();
@@ -56,6 +63,15 @@ export function previous() {
   }
   nowPlaying = history.pop();
   startedAt = Date.now();
+  g.__radioQueue = { queue, nowPlaying, history, startedAt };
+  return getState();
+}
+
+export function removeFromQueue(id) {
+  // Eliminar solo desde la cola; no afecta nowPlaying
+  const before = queue.length;
+  queue = queue.filter((item) => item.id !== id);
+  // Si no hubo cambios, devolver estado sin modificar
   g.__radioQueue = { queue, nowPlaying, history, startedAt };
   return getState();
 }
