@@ -418,7 +418,7 @@ export default function Home() {
           <div className="lg:basis-[50%] lg:flex-none">
             <div className="mx-left w-full lg:w-1/2">
             <h2 className="text-xl font-semibold">En reproducción</h2>
-            <div className="mt-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
+            <div className="mt-3 rounded-md p-4 border-beam">
               {nowPlaying ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">

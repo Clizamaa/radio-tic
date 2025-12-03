@@ -24,3 +24,33 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Border Beam effect only on the border (no background fill) */
+.border-beam { position: relative; border-radius: 0.375rem; }
+
+.border-beam::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px; /* border thickness */
+  border-radius: inherit;
+  background: linear-gradient(90deg, #06b6d4, #a78bfa, #06b6d4);
+  background-size: 200% 200%;
+  animation: borderBeam 4s linear infinite;
+  pointer-events: none;
+  /* mask out the inner content so only the ring shows */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+}
+
+@keyframes borderBeam {
+  0% { background-position: 0% 50%, 0% 0%; }
+  100% { background-position: 100% 50%, 200% 0%; }
+}
+
+.dark .border-beam::before {
+  background: linear-gradient(90deg, #22d3ee, #c084fc, #22d3ee);
+}
