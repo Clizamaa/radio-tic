@@ -75,3 +75,25 @@ export function removeFromQueue(id) {
   g.__radioQueue = { queue, nowPlaying, history, startedAt };
   return getState();
 }
+
+export function reorderQueue(orderIds) {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return getState();
+  }
+  const idToItem = new Map(queue.map((item) => [item.id, item]));
+  const newQueue = [];
+  for (const id of orderIds) {
+    const item = idToItem.get(id);
+    if (item) {
+      newQueue.push(item);
+      idToItem.delete(id);
+    }
+  }
+  // Mantener cualquier item que no haya sido listado en orderIds al final, en su orden actual
+  for (const item of idToItem.values()) {
+    newQueue.push(item);
+  }
+  queue = newQueue;
+  g.__radioQueue = { queue, nowPlaying, history, startedAt };
+  return getState();
+}

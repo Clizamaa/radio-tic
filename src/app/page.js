@@ -53,6 +53,8 @@ export default function Home() {
   const [deletingId, setDeletingId] = useState(null);
   const [savedNickname, setSavedNickname] = useState("");
   const [editingNickname, setEditingNickname] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverId, setDragOverId] = useState(null);
 
   // Último video solicitado (cola tail) o el actualmente reproduciéndose si la cola está vacía
   const lastRequestedVideoId = queue.length > 0 ? queue[queue.length - 1]?.videoId : nowPlaying?.videoId;
@@ -219,6 +221,30 @@ export default function Home() {
       if (Object.prototype.hasOwnProperty.call(data, "startedAt")) setStartedAt(data.startedAt);
     }
     setDeletingId(null);
+  }
+
+  function computeReorderIds(dragId, targetId) {
+    const ids = queue.map((i) => i.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from === -1 || to === -1) return ids;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    return ids;
+  }
+
+  async function applyReorder(order) {
+    const res = await fetch("/api/queue/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Object.prototype.hasOwnProperty.call(data, "queue")) setQueue(data.queue);
+      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) setNowPlaying(data.nowPlaying);
+      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) setStartedAt(data.startedAt);
+    }
   }
 
   async function advanceQueue() {
@@ -434,7 +460,42 @@ export default function Home() {
             <div className="mt-3 space-y-2">
               {queue.length === 0 && <div className="text-sm opacity-60">No hay canciones en cola</div>}
               {queue.map((q) => (
-                <div key={q.id} className="flex items-center gap-3 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
+                <div
+                  key={q.id}
+                  className={`flex items-center gap-3 rounded-md border p-3 transition-all duration-200 ease-in-out ${dragOverId === q.id ? "border-blue-500 ring-4 ring-blue-400 bg-blue-100/50 translate-y-1 translate-x-1" : "border-zinc-200 dark:border-zinc-800"} ${draggingId === q.id ? "scale-90 opacity-90 shadow-lg bg-blue-50/40 ring-2 ring-blue-300" : ""}`}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (draggingId && draggingId !== q.id) setDragOverId(q.id);
+                  }}
+                  onDrop={async () => {
+                    if (!draggingId || draggingId === q.id) {
+                      setDragOverId(null);
+                      setDraggingId(null);
+                      return;
+                    }
+                    const order = computeReorderIds(draggingId, q.id);
+                    await applyReorder(order);
+                    setDragOverId(null);
+                    setDraggingId(null);
+                  }}
+                  onDragLeave={() => {
+                    // Suavizar salida del resaltado al dejar el item
+                    if (dragOverId === q.id) setDragOverId(null);
+                  }}
+                >
+                  <button
+                    className={`inline-flex items-center justify-center rounded-md px-3 py-3 text-sm cursor-grab active:cursor-grabbing transition-transform duration-200 ${draggingId === q.id ? "scale-125 text-blue-700 drop-shadow-sm" : "text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"}`}
+                    draggable
+                    onDragStart={() => setDraggingId(q.id)}
+                    onDragEnd={() => {
+                      setDragOverId(null);
+                      setDraggingId(null);
+                    }}
+                    title="Arrastrar para reordenar"
+                    aria-label="Arrastrar para reordenar"
+                  >
+                    <span aria-hidden="true">☰</span>
+                  </button>
                   <img src={q.thumbnailUrl} alt="thumb" className="h-12 w-20 rounded object-cover" />
                   <div className="flex-1">
                     <div className="text-sm font-medium">{q.title}</div>
