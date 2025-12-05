@@ -310,8 +310,8 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-100">
       <main className="max-w-auto px-8 py-10">
-        <h1 className="text-3xl font-semibold">Radio TIC</h1>
-        <p className="mt-1 text-sm opacity-70">Solicita canciones y colócalas en cola. Reproducción solo audio.</p>
+        <h1 className="text-3xl font-semibold text-center">Radio ShiarshaSoft 📻</h1>
+        <p className="mt-1 text-sm opacity-70 text-center">Solicita canciones y colócalas en cola. Reproducción solo audio.</p>
 
         {/* Layout principal: dos columnas */}
         <div className="mt-8 flex flex-col gap-8 lg:flex-row">
