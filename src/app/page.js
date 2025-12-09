@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AudioPlayer } from "@/components/audio-player";
 
 function IconPrev(props) {
   return (
@@ -55,6 +56,10 @@ export default function Home() {
   const [editingNickname, setEditingNickname] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [ytTime, setYtTime] = useState(0);
+  const [ytDur, setYtDur] = useState(0);
+  const [ytVol, setYtVol] = useState(100);
+  const [ytMuted, setYtMuted] = useState(false);
 
   // Último video solicitado (cola tail) o el actualmente reproduciéndose si la cola está vacía
   const lastRequestedVideoId = queue.length > 0 ? queue[queue.length - 1]?.videoId : nowPlaying?.videoId;
@@ -65,6 +70,16 @@ export default function Home() {
     setSavedNickname(saved);
     refreshState();
     loadYouTubeApi();
+    return () => {
+      const p = playerRef.current;
+      if (p && p.__poll) {
+        clearInterval(p.__poll);
+      }
+      try {
+        p?.destroy?.();
+      } catch {}
+      playerRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -103,23 +118,49 @@ export default function Home() {
     }
     window.onYouTubeIframeAPIReady = () => {
       ytReadyRef.current = true;
-      playerRef.current = new window.YT.Player("player", {
-        height: "0",
-        width: "0",
-        events: {
-          onStateChange: (e) => {
-            const YTPS = window.YT?.PlayerState;
-            if (!YTPS) return;
-            if (e.data === YTPS.PLAYING) setPlayerState("playing");
-            else if (e.data === YTPS.PAUSED) setPlayerState("paused");
-            else if (e.data === YTPS.ENDED) {
-              setPlayerState("ended");
-              advanceQueue();
-            } else if (e.data === YTPS.CUED) setPlayerState("idle");
-          },
-        },
-        playerVars: { controls: 0 },
-      });
+      const ensureInit = () => {
+        let el = document.getElementById("yt-audio-container");
+        if (!el) {
+          el = document.createElement("div");
+          el.id = "yt-audio-container";
+          el.style.cssText = "position:fixed;width:0;height:0;overflow:hidden";
+          document.body.appendChild(el);
+        }
+        try {
+          playerRef.current = new window.YT.Player("yt-audio-container", {
+            height: "0",
+            width: "0",
+            events: {
+              onStateChange: (e) => {
+                const YTPS = window.YT?.PlayerState;
+                if (!YTPS) return;
+                if (e.data === YTPS.PLAYING) setPlayerState("playing");
+                else if (e.data === YTPS.PAUSED) setPlayerState("paused");
+                else if (e.data === YTPS.ENDED) {
+                  setPlayerState("ended");
+                  advanceQueue();
+                } else if (e.data === YTPS.CUED) setPlayerState("idle");
+              },
+            },
+            playerVars: { controls: 0 },
+          });
+          const id = setInterval(() => {
+            const p = playerRef.current;
+            if (p && p.getCurrentTime) {
+              try {
+                setYtTime(p.getCurrentTime() || 0);
+                setYtDur(p.getDuration() || 0);
+                setYtVol(p.getVolume?.() ?? ytVol);
+                setYtMuted(p.isMuted?.() ?? ytMuted);
+              } catch {}
+            }
+          }, 500);
+          playerRef.current.__poll = id;
+        } catch {
+          setTimeout(ensureInit, 50);
+        }
+      };
+      ensureInit();
     };
   }
 
@@ -416,44 +457,35 @@ export default function Home() {
 
           {/* Derecha: Reproductor y Cola */}
           <div className="lg:basis-[50%] lg:flex-none">
-            <div className="mx-left w-full lg:w-1/2">
+            <div className="mx-auto w-fit">
             <h2 className="text-xl font-semibold">En reproducción</h2>
-            <div className="mt-3 rounded-md p-4 border-beam">
+            <div className="mt-3 rounded-md p-3 border-beam w-fit mx-auto">
               {nowPlaying ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <img src={nowPlaying.thumbnailUrl} alt="carátula" className="h-16 w-28 rounded object-cover" />
-                    <div className="flex-1">
-                      <div className="text-base font-semibold">{nowPlaying.title}</div>
-                      <div className="text-xs opacity-60">Solicitado por {nowPlaying.nickname}</div>
-                    </div>
-                  </div>
-                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
-                    playerState === "playing"
-                      ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
-                      : playerState === "paused"
-                      ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100"
-                      : "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"
-                  }`}>
-                    {playerState === "playing" ? <IconPlay className="h-3 w-3" /> : playerState === "paused" ? <IconPause className="h-3 w-3" /> : <IconPause className="h-3 w-3" />}
-                    {playerState === "playing" ? "Reproduciendo" : playerState === "paused" ? "Pausado" : "Detenido"}
-                  </div>
-                  <div className="mt-3 flex gap-3">
-                    <button aria-label="Anterior" title="Anterior" onClick={previousQueue} className="inline-flex items-center justify-center rounded-md bg-zinc-200 px-3 py-2 text-black dark:bg-zinc-800 dark:text-white">
-                      <IconPrev className="h-5 w-5" />
-                    </button>
-                    <button aria-label="Play/Pausa" title="Play/Pausa" onClick={togglePlayPause} className="inline-flex items-center justify-center rounded-md bg-green-600 px-3 py-2 text-white">
-                      {playerState === "playing" ? <IconPause className="h-5 w-5" /> : <IconPlay className="h-5 w-5" />}
-                    </button>
-                    <button aria-label="Siguiente" title="Siguiente" onClick={advanceQueue} className="inline-flex items-center justify-center rounded-md bg-orange-600 px-3 py-2 text-white">
-                      <IconNext className="h-5 w-5" />
-                    </button>
-                  </div>
-                </div>
+                <AudioPlayer
+                  title={nowPlaying.title}
+                  artist={nowPlaying.nickname}
+                  cover={nowPlaying.thumbnailUrl}
+                  duration={ytDur}
+                  currentTime={ytTime}
+                  isPlaying={playerState === "playing"}
+                  onPlayPause={togglePlayPause}
+                  onPrev={previousQueue}
+                  onNext={advanceQueue}
+                  onSeek={(s) => playerRef.current?.seekTo?.(s, true)}
+                  volume={ytVol}
+                  onVolumeChange={(v) => playerRef.current?.setVolume?.(v)}
+                  isMuted={ytMuted}
+                  onToggleMute={() => {
+                    const p = playerRef.current;
+                    if (!p) return;
+                    if (p.isMuted?.()) p.unMute?.(); else p.mute?.();
+                    setYtMuted(p.isMuted?.() ?? false);
+                  }}
+                />
               ) : (
                 <div className="text-sm opacity-60">No hay canción en reproducción</div>
               )}
-              <div id="player" className="h-0 w-0 overflow-hidden"></div>
+
             </div>
 
             <h2 className="mt-6 text-xl font-semibold">Cola</h2>
