@@ -1,555 +1,202 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { AudioPlayer } from "@/components/audio-player";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-function IconPrev(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className || "h-5 w-5"} aria-hidden="true">
-      <path d="M19 12H7" />
-      <path d="M12 19L5 12L12 5" />
-    </svg>
-  );
-}
-
-function IconNext(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className || "h-5 w-5"} aria-hidden="true">
-      <path d="M5 12H17" />
-      <path d="M12 5L19 12L12 19" />
-    </svg>
-  );
-}
-
-function IconPlay(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={props.className || "h-5 w-5"} aria-hidden="true">
-      <path d="M8 5L19 12L8 19Z" />
-    </svg>
-  );
-}
-
-function IconPause(props) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={props.className || "h-5 w-5"} aria-hidden="true">
-      <rect x="6" y="5" width="4" height="14" rx="1" />
-      <rect x="14" y="5" width="4" height="14" rx="1" />
-    </svg>
-  );
-}
-
-export default function Home() {
+export default function Landing() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [code, setCode] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Estados para el flujo de nickname
+  const [step, setStep] = useState("initial"); // "initial" | "nickname"
+  const [action, setAction] = useState(null); // "create" | "join"
   const [nickname, setNickname] = useState("");
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searchError, setSearchError] = useState(null);
-  const [queue, setQueue] = useState([]);
-  const [nowPlaying, setNowPlaying] = useState(null);
-  const [startedAt, setStartedAt] = useState(null);
-  const playerRef = useRef(null);
-  const ytReadyRef = useRef(false);
-  const currentVidRef = useRef(null);
-  const [playerState, setPlayerState] = useState("idle");
-  const [requestingId, setRequestingId] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [savedNickname, setSavedNickname] = useState("");
-  const [editingNickname, setEditingNickname] = useState(false);
-  const [draggingId, setDraggingId] = useState(null);
-  const [dragOverId, setDragOverId] = useState(null);
-  const [ytTime, setYtTime] = useState(0);
-  const [ytDur, setYtDur] = useState(0);
-  const [ytVol, setYtVol] = useState(100);
-  const [ytMuted, setYtMuted] = useState(false);
-
-  // Último video solicitado (cola tail) o el actualmente reproduciéndose si la cola está vacía
-  const lastRequestedVideoId = queue.length > 0 ? queue[queue.length - 1]?.videoId : nowPlaying?.videoId;
 
   useEffect(() => {
-    const saved = localStorage.getItem("radio_nickname") || "";
-    setNickname(saved);
-    setSavedNickname(saved);
-    refreshState();
-    loadYouTubeApi();
-    return () => {
-      const p = playerRef.current;
-      if (p && p.__poll) {
-        clearInterval(p.__poll);
-      }
-      try {
-        p?.destroy?.();
-      } catch {}
-      playerRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      refreshState();
-    }, 10000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const vid = nowPlaying?.videoId;
-    if (!playerRef.current || !vid) return;
-    if (currentVidRef.current === vid) return;
-    try {
-      playerRef.current.loadVideoById(vid);
-      currentVidRef.current = vid;
-      const t0 = typeof startedAt === "number" ? startedAt : null;
-      if (t0) {
-        const elapsed = Math.max(0, Math.floor((Date.now() - t0) / 1000));
-        try {
-          playerRef.current.playVideo();
-          playerRef.current.seekTo(elapsed, true);
-        } catch {}
-      }
-    } catch {}
-  }, [nowPlaying?.videoId, startedAt]);
-
-  function loadYouTubeApi() {
-    if (typeof window === "undefined") return;
-    if (ytReadyRef.current) return;
-    const existing = document.querySelector("script[src='https://www.youtube.com/iframe_api']");
-    if (!existing) {
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.body.appendChild(tag);
+    if (searchParams.get("error") === "room_not_found") {
+      setError("La sala no existe.");
     }
-    window.onYouTubeIframeAPIReady = () => {
-      ytReadyRef.current = true;
-      const ensureInit = () => {
-        let el = document.getElementById("yt-audio-container");
-        if (!el) {
-          el = document.createElement("div");
-          el.id = "yt-audio-container";
-          el.style.cssText = "position:fixed;width:0;height:0;overflow:hidden";
-          document.body.appendChild(el);
-        }
-        try {
-          playerRef.current = new window.YT.Player("yt-audio-container", {
-            height: "0",
-            width: "0",
-            events: {
-              onStateChange: (e) => {
-                const YTPS = window.YT?.PlayerState;
-                if (!YTPS) return;
-                if (e.data === YTPS.PLAYING) setPlayerState("playing");
-                else if (e.data === YTPS.PAUSED) setPlayerState("paused");
-                else if (e.data === YTPS.ENDED) {
-                  setPlayerState("ended");
-                  advanceQueue();
-                } else if (e.data === YTPS.CUED) setPlayerState("idle");
-              },
-            },
-            playerVars: { controls: 0 },
-          });
-          const id = setInterval(() => {
-            const p = playerRef.current;
-            if (p && p.getCurrentTime) {
-              try {
-                setYtTime(p.getCurrentTime() || 0);
-                setYtDur(p.getDuration() || 0);
-                setYtVol(p.getVolume?.() ?? ytVol);
-                setYtMuted(p.isMuted?.() ?? ytMuted);
-              } catch {}
-            }
-          }, 500);
-          playerRef.current.__poll = id;
-        } catch {
-          setTimeout(ensureInit, 50);
-        }
-      };
-      ensureInit();
-    };
+    // Cargar nickname guardado
+    const saved = localStorage.getItem("radio_nickname");
+    if (saved) setNickname(saved);
+  }, [searchParams]);
+
+  function startCreateRoom() {
+    setError(null);
+    setAction("create");
+    setStep("nickname");
   }
 
-  async function refreshState() {
-    const res = await fetch("/api/queue");
-    if (res.ok) {
-      const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
-        setQueue(data.queue);
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
-        if (data.nowPlaying) {
-          setNowPlaying(data.nowPlaying);
-        } else {
-          // Evitar borrar la tarjeta si el reproductor está reproduciendo
-          if (playerState !== "playing") {
-            setNowPlaying(null);
-            // Permitir que un futuro cambio vuelva a cargar correctamente
-            currentVidRef.current = null;
-          }
-        }
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
-        if (typeof data.startedAt === "number") {
-          setStartedAt(data.startedAt);
-        } else {
-          if (playerState !== "playing") {
-            setStartedAt(null);
-          }
-        }
-      }
-    }
+  function startJoinRoom() {
+    if (!code.trim()) return;
+    setError(null);
+    setAction("join");
+    setStep("nickname");
   }
 
-  async function search() {
-    if (!query.trim()) return;
-    setSearchError(null);
-    setResults([]);
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data?.error || "Error al buscar en YouTube";
-        setSearchError(msg);
-        return;
-      }
-      setResults(data.results || []);
-      // Limpiar el input al completar la búsqueda correctamente
-      setQuery("");
-    } catch (err) {
-      setSearchError("No se pudo conectar al servidor de búsqueda");
-    }
-  }
-
-  async function request(video) {
+  async function handleContinue() {
     if (!nickname.trim()) {
-      alert("Primero registra un nickname");
+      setError("Por favor ingresa un nickname.");
       return;
     }
-    // Evitar doble click inmediato sobre la misma tarjeta
-    if (requestingId === video.videoId) return;
-    setRequestingId(video.videoId);
-    const res = await fetch("/api/queue/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nickname,
-        videoId: video.videoId,
-        title: video.title,
-        thumbnailUrl: video.thumbnailUrl,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
-        setQueue(data.queue);
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
-        setNowPlaying(data.nowPlaying);
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
-        setStartedAt(data.startedAt);
-      }
-    }
-    setRequestingId(null);
-  }
-
-  async function removeQueued(id) {
-    setDeletingId(id);
-    const res = await fetch("/api/queue/remove", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) setQueue(data.queue);
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) setNowPlaying(data.nowPlaying);
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) setStartedAt(data.startedAt);
-    }
-    setDeletingId(null);
-  }
-
-  function computeReorderIds(dragId, targetId) {
-    const ids = queue.map((i) => i.id);
-    const from = ids.indexOf(dragId);
-    const to = ids.indexOf(targetId);
-    if (from === -1 || to === -1) return ids;
-    ids.splice(from, 1);
-    ids.splice(to, 0, dragId);
-    return ids;
-  }
-
-  async function applyReorder(order) {
-    const res = await fetch("/api/queue/reorder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) setQueue(data.queue);
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) setNowPlaying(data.nowPlaying);
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) setStartedAt(data.startedAt);
+    localStorage.setItem("radio_nickname", nickname.trim());
+    
+    if (action === "create") {
+      await createRoom();
+    } else if (action === "join") {
+      await joinRoom();
     }
   }
 
-  async function advanceQueue() {
-    const res = await fetch("/api/queue/advance", { method: "POST" });
-    if (res.ok) {
-      const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
-        setQueue(data.queue);
+  async function createRoom() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/room/create", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        // Guardar token de administrador para esta sala
+        if (data.adminToken) {
+          localStorage.setItem(`radio_admin_${data.code}`, data.adminToken);
+        }
+        router.push(`/${data.code}`);
+      } else {
+        setError("Error al crear la sala.");
+        setLoading(false);
       }
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
-        setNowPlaying(data.nowPlaying);
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
-        setStartedAt(data.startedAt);
-      }
+    } catch (err) {
+      setError("Error de conexión.");
+      setLoading(false);
     }
   }
 
-  async function previousQueue() {
-    const res = await fetch("/api/queue/previous", { method: "POST" });
-    if (res.ok) {
+  async function joinRoom() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/room/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code.trim() }),
+      });
       const data = await res.json();
-      if (Object.prototype.hasOwnProperty.call(data, "queue")) {
-        setQueue(data.queue);
+      if (res.ok && data.valid) {
+        router.push(`/${code.trim()}`);
+      } else {
+        setError("Código de sala inválido.");
+        setLoading(false);
       }
-      if (Object.prototype.hasOwnProperty.call(data, "nowPlaying")) {
-        setNowPlaying(data.nowPlaying);
-      }
-      if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
-        setStartedAt(data.startedAt);
-      }
+    } catch (err) {
+      setError("Error de conexión.");
+      setLoading(false);
     }
-  }
-
-  function togglePlayPause() {
-    const ps = window.YT?.PlayerState;
-    const player = playerRef.current;
-    if (!player || !ps || !player.getPlayerState) return;
-    const state = player.getPlayerState();
-    if (state === ps.PLAYING) player.pauseVideo();
-    else player.playVideo();
-  }
-
-  function saveNickname() {
-    const val = nickname.trim();
-    if (!val) return;
-    localStorage.setItem("radio_nickname", val);
-    setNickname(val);
-    setSavedNickname(val);
-    setEditingNickname(false);
-  }
-
-  function startNicknameEdit() {
-    setEditingNickname(true);
-    setNickname(savedNickname || "");
-  }
-
-  function cancelNicknameEdit() {
-    setEditingNickname(false);
-    setNickname(savedNickname || "");
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-100">
-      <main className="max-w-auto px-8 py-10">
-        <h1 className="text-3xl font-semibold text-center">Radio ShiarshaSoft 📻</h1>
-        <p className="mt-1 text-sm opacity-70 text-center">Solicita canciones y colócalas en cola. Reproducción solo audio.</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-100 p-4 font-sans relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-500/10 via-zinc-50/0 to-zinc-50/0 dark:from-violet-900/20 dark:via-black/0 dark:to-black/0 pointer-events-none" />
+      
+      <main className="w-full max-w-md space-y-8 relative z-10">
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-violet-500/20 mx-auto mb-6 transform rotate-3">
+            R
+          </div>
+          <h1 className="text-4xl font-extrabold tracking-tight">Radio ShiarshaSoft</h1>
+          <p className="text-lg text-zinc-600 dark:text-zinc-400">
+            {step === "initial" 
+              ? "Tu propia estación de radio colaborativa."
+              : "Casi listo, dinos cómo llamarte."}
+          </p>
+        </div>
 
-        {/* Layout principal: dos columnas */}
-        <div className="mt-8 flex flex-col gap-8 lg:flex-row">
-          {/* Izquierda: Peticiones (nickname, búsqueda y resultados) */}
-          <div className="lg:basis-[50%] lg:flex-none">
-            <div className="mx-auto w-full lg:w-1/2">
-              <h2 className="text-xl font-semibold">Peticiones</h2>
-              <div className="mt-3 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-                <label className="block text-sm font-medium">Tu nickname</label>
-                {savedNickname && !editingNickname ? (
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="text-sm font-medium">Bienvenido {savedNickname}</div>
-                    <button
-                      onClick={startNicknameEdit}
-                      className="rounded-md bg-zinc-200 px-3 py-2 text-xs text-black dark:bg-zinc-800 dark:text-white"
-                    >
-                      Cambiar
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-2 flex gap-2">
-                    <input
-                      value={nickname}
-                      onChange={(e) => setNickname(e.target.value)}
-                      placeholder="ej. Juanito"
-                      className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                    />
-                    <button
-                      onClick={saveNickname}
-                      className="rounded-md bg-zinc-900 px-3 py-2 text-sm text-white dark:bg-zinc-200 dark:text-black"
-                    >
-                      Guardar
-                    </button>
-                    {savedNickname ? (
-                      <button
-                        onClick={cancelNicknameEdit}
-                        className="rounded-md bg-zinc-200 px-3 py-2 text-sm text-black dark:bg-zinc-800 dark:text-white"
-                      >
-                        Cancelar
-                      </button>
-                    ) : null}
-                  </div>
-                )}
+        <div className="bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-8">
+          {step === "initial" ? (
+            <>
+              <div className="space-y-4">
+                <button
+                  onClick={startCreateRoom}
+                  className="w-full py-4 px-6 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-violet-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  Crear Nueva Sala
+                </button>
 
-                <label className="mt-4 block text-sm font-medium">Buscar en YouTube</label>
-                <div className="mt-2 flex gap-2">
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-zinc-200 dark:border-zinc-800" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase tracking-widest font-semibold">
+                    <span className="bg-transparent px-4 text-zinc-400">
+                      o únete
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
                   <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Nombre de la canción o artista"
-                    className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    type="text"
+                    placeholder="Código de sala (ej. A1B2C3)"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                    className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-black/50 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none text-center font-mono text-lg tracking-widest uppercase transition-all"
+                    maxLength={6}
                   />
                   <button
-                    onClick={search}
-                    className="rounded-md bg-blue-600 px-3 py-2 text-sm text-white"
+                    onClick={startJoinRoom}
+                    disabled={!code.trim()}
+                    className="w-full py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:hover:bg-zinc-200 dark:text-black rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]"
                   >
-                    Buscar
+                    Entrar a Sala
                   </button>
                 </div>
-                {searchError && (
-                  <div className="mt-2 text-sm text-red-600 dark:text-red-400">
-                    {searchError}
-                  </div>
-                )}
               </div>
-
-              <h3 className="mt-6 text-lg font-semibold">Resultados</h3>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {results.map((r) => (
-                  <div key={r.videoId} className="w-full h-full flex flex-col rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
-                    <div className="relative w-full overflow-hidden rounded" style={{ aspectRatio: "16/9" }}>
-                      <img src={r.thumbnailUrl} alt="thumb" className="absolute inset-0 h-full w-full object-cover" />
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-sm font-medium">{r.title}</div>
-                      <div className="text-xs opacity-60">{r.channel}</div>
-                    </div>
-                    <div className="mt-auto pt-2">
-                      {(() => {
-                        const isBlocked = r.videoId === lastRequestedVideoId;
-                        const isLoading = requestingId === r.videoId;
-                        const disabled = isBlocked || isLoading;
-                        const label = isBlocked ? "En cola" : isLoading ? "Solicitando..." : "Solicitar";
-                        return (
-                          <button
-                            onClick={() => request(r)}
-                            disabled={disabled}
-                            className={`w-full rounded-md px-3 py-2 text-sm text-white ${disabled ? "bg-green-600 opacity-50 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
-                            title={label}
-                            aria-label={label}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Derecha: Reproductor y Cola */}
-          <div className="lg:basis-[50%] lg:flex-none">
-            <div className="mx-auto w-fit">
-            <h2 className="text-xl font-semibold">En reproducción</h2>
-            <div className="mt-3 rounded-md p-3 border-beam w-fit mx-auto">
-              {nowPlaying ? (
-                <AudioPlayer
-                  title={nowPlaying.title}
-                  artist={nowPlaying.nickname}
-                  cover={nowPlaying.thumbnailUrl}
-                  duration={ytDur}
-                  currentTime={ytTime}
-                  isPlaying={playerState === "playing"}
-                  onPlayPause={togglePlayPause}
-                  onPrev={previousQueue}
-                  onNext={advanceQueue}
-                  onSeek={(s) => playerRef.current?.seekTo?.(s, true)}
-                  volume={ytVol}
-                  onVolumeChange={(v) => playerRef.current?.setVolume?.(v)}
-                  isMuted={ytMuted}
-                  onToggleMute={() => {
-                    const p = playerRef.current;
-                    if (!p) return;
-                    if (p.isMuted?.()) p.unMute?.(); else p.mute?.();
-                    setYtMuted(p.isMuted?.() ?? false);
-                  }}
+            </>
+          ) : (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300 ml-1">Tu Nickname</label>
+                <input
+                  type="text"
+                  placeholder="Ej. Juanito"
+                  value={nickname}
+                  onChange={(e) => setNickname(e.target.value)}
+                  className="w-full px-4 py-3 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-black/50 focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 outline-none text-lg transition-all"
+                  onKeyDown={(e) => e.key === "Enter" && handleContinue()}
+                  autoFocus
                 />
-              ) : (
-                <div className="text-sm opacity-60">No hay canción en reproducción</div>
-              )}
-
-            </div>
-
-            <h2 className="mt-6 text-xl font-semibold">Cola</h2>
-            <div className="mt-3 space-y-2">
-              {queue.length === 0 && <div className="text-sm opacity-60">No hay canciones en cola</div>}
-              {queue.map((q) => (
-                <div
-                  key={q.id}
-                  className={`flex items-center gap-3 rounded-md border p-3 transition-all duration-200 ease-in-out ${dragOverId === q.id ? "border-blue-500 ring-4 ring-blue-400 bg-blue-100/50 translate-y-1 translate-x-1" : "border-zinc-200 dark:border-zinc-800"} ${draggingId === q.id ? "scale-90 opacity-90 shadow-lg bg-blue-50/40 ring-2 ring-blue-300" : ""}`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    if (draggingId && draggingId !== q.id) setDragOverId(q.id);
-                  }}
-                  onDrop={async () => {
-                    if (!draggingId || draggingId === q.id) {
-                      setDragOverId(null);
-                      setDraggingId(null);
-                      return;
-                    }
-                    const order = computeReorderIds(draggingId, q.id);
-                    await applyReorder(order);
-                    setDragOverId(null);
-                    setDraggingId(null);
-                  }}
-                  onDragLeave={() => {
-                    // Suavizar salida del resaltado al dejar el item
-                    if (dragOverId === q.id) setDragOverId(null);
-                  }}
+              </div>
+              
+              <div className="flex gap-4 pt-2">
+                <button
+                  onClick={() => setStep("initial")}
+                  className="flex-1 py-3 px-4 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-300 rounded-xl font-bold transition-colors"
                 >
-                  <button
-                    className={`inline-flex items-center justify-center rounded-md px-3 py-3 text-sm cursor-grab active:cursor-grabbing transition-transform duration-200 ${draggingId === q.id ? "scale-125 text-blue-700 drop-shadow-sm" : "text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"}`}
-                    draggable
-                    onDragStart={() => setDraggingId(q.id)}
-                    onDragEnd={() => {
-                      setDragOverId(null);
-                      setDraggingId(null);
-                    }}
-                    title="Arrastrar para reordenar"
-                    aria-label="Arrastrar para reordenar"
-                  >
-                    <span aria-hidden="true">☰</span>
-                  </button>
-                  <img src={q.thumbnailUrl} alt="thumb" className="h-12 w-20 rounded object-cover" />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{q.title}</div>
-                    <div className="text-xs opacity-60">{q.nickname}</div>
-                  </div>
-                  <button
-                    onClick={() => removeQueued(q.id)}
-                    disabled={deletingId === q.id}
-                    className={`rounded-md bg-red-600 px-3 py-2 text-xs text-white ${deletingId === q.id ? "opacity-50 cursor-not-allowed" : "hover:bg-red-700"}`}
-                    title={deletingId === q.id ? "Eliminando..." : "Eliminar"}
-                    aria-label={deletingId === q.id ? "Eliminando..." : "Eliminar"}
-                  >
-                    {deletingId === q.id ? "Eliminando..." : "Eliminar"}
-                  </button>
-                </div>
-              ))}
+                  Volver
+                </button>
+                <button
+                  onClick={handleContinue}
+                  disabled={loading || !nickname.trim()}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-lg shadow-violet-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-[0.98]"
+                >
+                  {loading ? (action === "create" ? "Creando..." : "Entrando...") : "Continuar"}
+                </button>
+              </div>
             </div>
+          )}
 
+          {error && (
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-sm text-center font-medium animate-pulse">
+              {error}
             </div>
-          </div>
+          )}
         </div>
       </main>
+      
+      <footer className="absolute bottom-6 text-center text-xs text-zinc-400 dark:text-zinc-600">
+        © 2024 ShiarshaSoft. Todos los derechos reservados.
+      </footer>
     </div>
   );
 }

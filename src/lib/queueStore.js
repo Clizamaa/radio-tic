@@ -1,19 +1,140 @@
 const g = globalThis;
-if (!g.__radioQueue) {
-  g.__radioQueue = {
+
+// Inicializar el mapa de salas si no existe
+if (!g.__radioRooms) {
+  g.__radioRooms = new Map();
+}
+
+// Limpieza automática: 2 minutos de inactividad
+const INACTIVITY_TIMEOUT = 2 * 60 * 1000;
+
+if (!g.__cleanupInterval) {
+  g.__cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [code, room] of g.__radioRooms.entries()) {
+      if (now - room.lastActive > INACTIVITY_TIMEOUT) {
+        console.log(`Eliminando sala inactiva: ${code}`);
+        g.__radioRooms.delete(code);
+      }
+    }
+  }, 30000); // Revisar cada 30 segundos
+}
+
+/**
+ * Estructura de una sala:
+ * {
+ *   queue: [],
+ *   nowPlaying: null,
+ *   history: [],
+ *   startedAt: null,
+ *   adminToken: "...",
+ *   lastActive: number
+ * }
+ */
+
+// Helper para generar código aleatorio
+function generateRoomCode() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+function generateAdminToken() {
+  return Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+}
+
+export function createRoom() {
+  let code = generateRoomCode();
+  // Asegurar unicidad (aunque es improbable colisión con 6 chars y pocas salas)
+  while (g.__radioRooms.has(code)) {
+    code = generateRoomCode();
+  }
+  const adminToken = generateAdminToken();
+  const initialState = {
     queue: [],
     nowPlaying: null,
     history: [],
     startedAt: null,
+    adminToken,
+    lastActive: Date.now(),
+    createdAt: Date.now(), // Timestamp de creación
   };
-}
-let { queue, nowPlaying, history, startedAt } = g.__radioQueue;
-
-export function getState() {
-  return { nowPlaying, queue, history, startedAt };
+  g.__radioRooms.set(code, initialState);
+  return { code, adminToken };
 }
 
-export function addRequest({ nickname, videoId, title, thumbnailUrl }) {
+export function getAllRooms() {
+  const rooms = [];
+  for (const [code, room] of g.__radioRooms.entries()) {
+    // Recopilar nicknames únicos de la cola y el historial para estimar "integrantes"
+    const nicknames = new Set();
+    if (room.nowPlaying?.nickname) nicknames.add(room.nowPlaying.nickname);
+    room.queue.forEach(i => i.nickname && nicknames.add(i.nickname));
+    room.history.forEach(i => i.nickname && nicknames.add(i.nickname));
+    
+    rooms.push({
+      code,
+      createdAt: room.createdAt || room.lastActive, // Fallback si es vieja
+      lastActive: room.lastActive,
+      queueLength: room.queue.length,
+      nowPlaying: room.nowPlaying,
+      members: Array.from(nicknames), // Lista de nicknames activos recientemente
+      memberCount: nicknames.size
+    });
+  }
+  // Ordenar por más recientes primero
+  return rooms.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function deleteRoomAdmin(roomCode) {
+    return g.__radioRooms.delete(roomCode);
+}
+
+export function deleteRoom(roomCode, token) {
+  const room = g.__radioRooms.get(roomCode);
+  if (!room) return false;
+  if (room.adminToken !== token) return false;
+  
+  g.__radioRooms.delete(roomCode);
+  return true;
+}
+
+export function getRoomState(roomCode) {
+  if (!roomCode) return null;
+  const room = g.__radioRooms.get(roomCode);
+  if (room) {
+    room.lastActive = Date.now();
+  }
+  return room || null;
+}
+
+export function roomExists(roomCode) {
+  return g.__radioRooms.has(roomCode);
+}
+
+// Helper para obtener sala o crear una por defecto si es necesario (para compatibilidad)
+// En este caso, forzaremos el uso de roomCode, si no existe devolvemos null/error implícito.
+function getRoom(roomCode) {
+  const room = g.__radioRooms.get(roomCode);
+  if (room) {
+    room.lastActive = Date.now();
+  }
+  return room;
+}
+
+export function getState(roomCode) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+  return { ...room };
+}
+
+export function addRequest(roomCode, { nickname, videoId, title, thumbnailUrl }) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+
   const item = {
     id: Date.now(),
     videoId,
@@ -22,65 +143,74 @@ export function addRequest({ nickname, videoId, title, thumbnailUrl }) {
     nickname,
     createdAt: new Date().toISOString(),
   };
-  // Regla de negocio: evitar solicitudes consecutivas de la misma canción
+
+  const { queue, nowPlaying } = room;
+  
+  // Regla: evitar doble petición consecutiva
   const lastVideoId = queue.length > 0 ? queue[queue.length - 1]?.videoId : nowPlaying?.videoId;
   if (lastVideoId && lastVideoId === videoId) {
-    // No alteramos el estado; simplemente devolvemos el actual
-    g.__radioQueue = { queue, nowPlaying, history, startedAt };
-    return getState();
+    return getState(roomCode);
   }
+
   if (!nowPlaying) {
-    nowPlaying = item;
-    startedAt = Date.now();
+    room.nowPlaying = item;
+    room.startedAt = Date.now();
   } else {
-    queue.push(item);
+    room.queue.push(item);
   }
-  g.__radioQueue = { queue, nowPlaying, history, startedAt };
-  return getState();
+  
+  return getState(roomCode);
 }
 
-export function advance() {
-  if (nowPlaying) {
-    history.push(nowPlaying);
+export function advance(roomCode) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+
+  if (room.nowPlaying) {
+    room.history.push(room.nowPlaying);
   }
-  if (queue.length > 0) {
-    nowPlaying = queue.shift();
-    startedAt = Date.now();
+  if (room.queue.length > 0) {
+    room.nowPlaying = room.queue.shift();
+    room.startedAt = Date.now();
   } else {
-    nowPlaying = null;
-    startedAt = null;
+    room.nowPlaying = null;
+    room.startedAt = null;
   }
-  g.__radioQueue = { queue, nowPlaying, history, startedAt };
-  return getState();
+  return getState(roomCode);
 }
 
-export function previous() {
-  if (history.length === 0) {
-    return getState();
+export function previous(roomCode) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+
+  if (room.history.length === 0) {
+    return getState(roomCode);
   }
-  if (nowPlaying) {
-    queue.unshift(nowPlaying);
+  if (room.nowPlaying) {
+    room.queue.unshift(room.nowPlaying);
   }
-  nowPlaying = history.pop();
-  startedAt = Date.now();
-  g.__radioQueue = { queue, nowPlaying, history, startedAt };
-  return getState();
+  room.nowPlaying = room.history.pop();
+  room.startedAt = Date.now();
+  return getState(roomCode);
 }
 
-export function removeFromQueue(id) {
-  // Eliminar solo desde la cola; no afecta nowPlaying
-  const before = queue.length;
-  queue = queue.filter((item) => item.id !== id);
-  // Si no hubo cambios, devolver estado sin modificar
-  g.__radioQueue = { queue, nowPlaying, history, startedAt };
-  return getState();
+export function removeFromQueue(roomCode, id) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+
+  room.queue = room.queue.filter((item) => item.id !== id);
+  return getState(roomCode);
 }
 
-export function reorderQueue(orderIds) {
+export function reorderQueue(roomCode, orderIds) {
+  const room = getRoom(roomCode);
+  if (!room) return null;
+
   if (!Array.isArray(orderIds) || orderIds.length === 0) {
-    return getState();
+    return getState(roomCode);
   }
-  const idToItem = new Map(queue.map((item) => [item.id, item]));
+
+  const idToItem = new Map(room.queue.map((item) => [item.id, item]));
   const newQueue = [];
   for (const id of orderIds) {
     const item = idToItem.get(id);
@@ -89,11 +219,9 @@ export function reorderQueue(orderIds) {
       idToItem.delete(id);
     }
   }
-  // Mantener cualquier item que no haya sido listado en orderIds al final, en su orden actual
   for (const item of idToItem.values()) {
     newQueue.push(item);
   }
-  queue = newQueue;
-  g.__radioQueue = { queue, nowPlaying, history, startedAt };
-  return getState();
+  room.queue = newQueue;
+  return getState(roomCode);
 }
