@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Landing() {
+function LandingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [code, setCode] = useState("");
@@ -198,5 +198,17 @@ export default function Landing() {
         © 2025 SharshaSoft. Todos los derechos reservados.
       </footer>
     </div>
+  );
+}
+
+export default function Landing() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
+        <div className="animate-pulse w-8 h-8 rounded-full bg-violet-500"></div>
+      </div>
+    }>
+      <LandingContent />
+    </Suspense>
   );
 }
