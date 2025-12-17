@@ -19,5 +19,8 @@ export async function POST(req) {
   if (!state) {
     return NextResponse.json({ error: "Sala no encontrada" }, { status: 404 });
   }
+  if (state.error) {
+    return NextResponse.json({ error: state.error }, { status: 400 });
+  }
   return NextResponse.json(state);
 }

@@ -7,6 +7,31 @@ export default function AdminPanel() {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRoom, setSelectedRoom] = useState(null); // Para ver detalles/integrantes
+  
+  // Auth state
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (username === "chris" && password === "Soporte..") {
+      setIsAuthenticated(true);
+      setLoginError("");
+      // Opcional: guardar en sessionStorage para persistir solo en la pestaña
+      sessionStorage.setItem("admin_auth", "true");
+    } else {
+      setLoginError("Credenciales inválidas");
+    }
+  };
+
+  useEffect(() => {
+    // Check session on mount
+    if (sessionStorage.getItem("admin_auth") === "true") {
+      setIsAuthenticated(true);
+    }
+  }, []);
 
   const fetchRooms = async () => {
     setLoading(true);
@@ -22,10 +47,12 @@ export default function AdminPanel() {
   };
 
   useEffect(() => {
-    fetchRooms();
-    const interval = setInterval(fetchRooms, 10000); // Auto-refresh cada 10s
-    return () => clearInterval(interval);
-  }, []);
+    if (isAuthenticated) {
+      fetchRooms();
+      const interval = setInterval(fetchRooms, 10000); // Auto-refresh cada 10s
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]);
 
   const handleDelete = async (code) => {
     if (!confirm(`¿Estás seguro de eliminar la sala ${code}?`)) return;
@@ -65,15 +92,73 @@ export default function AdminPanel() {
     return `${hours}h ${min % 60}m`;
   };
 
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 text-white font-sans selection:bg-violet-500/30 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-zinc-900/50 border border-white/5 rounded-2xl p-8 shadow-2xl backdrop-blur-xl">
+          <div className="text-center mb-8">
+            <img src="/Image_6.png" alt="Radio Logo" className="w-16 h-16 object-contain drop-shadow-lg mx-auto mb-4" />
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400">
+              Admin Access
+            </h1>
+            <p className="text-zinc-500 text-sm mt-2">Ingresa tus credenciales para continuar</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wider">Usuario</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-zinc-950/50 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/50 transition-all"
+                placeholder="Ingresa tu usuario"
+                autoFocus
+              />
+            </div>
+            
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-1.5 uppercase tracking-wider">Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-zinc-950/50 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/50 transition-all"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {loginError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold py-3 rounded-lg shadow-lg shadow-violet-500/20 transition-all transform active:scale-[0.98] mt-2"
+            >
+              Ingresar
+            </button>
+          </form>
+          
+          <div className="mt-6 text-center">
+            <Link href="/" className="text-sm text-zinc-500 hover:text-white transition-colors">
+              ← Volver al inicio
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white font-sans selection:bg-violet-500/30">
       {/* Header */}
       <header className="fixed top-0 w-full z-50 bg-zinc-950/80 backdrop-blur-md border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-violet-500/20">
-              R
-            </div>
+            <img src="/Image_6.png" alt="Radio Logo" className="w-10 h-10 object-contain drop-shadow-lg" />
             <span className="font-bold text-lg tracking-tight">RadioAdmin</span>
           </div>
           <Link href="/" className="text-sm text-zinc-400 hover:text-white transition-colors">

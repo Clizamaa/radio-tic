@@ -101,10 +101,10 @@ export default function Landing() {
       
       <main className="w-full max-w-md space-y-8 relative z-10">
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold text-3xl shadow-xl shadow-violet-500/20 mx-auto mb-6 transform rotate-3">
-            R
+          <div className="flex justify-center">
+            <img src="/Image_6.png" alt="Radio Logo" className="w-28 h-28 object-contain drop-shadow-xl transform rotate-3 hover:rotate-6 transition-transform duration-300" />
           </div>
-          <h1 className="text-4xl font-extrabold tracking-tight">Radio ShiarshaSoft</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Radio SharshaSoft</h1>
           <p className="text-lg text-zinc-600 dark:text-zinc-400">
             {step === "initial" 
               ? "Tu propia estación de radio colaborativa."
@@ -195,7 +195,7 @@ export default function Landing() {
       </main>
       
       <footer className="absolute bottom-6 text-center text-xs text-zinc-400 dark:text-zinc-600">
-        © 2024 ShiarshaSoft. Todos los derechos reservados.
+        © 2025 SharshaSoft. Todos los derechos reservados.
       </footer>
     </div>
   );

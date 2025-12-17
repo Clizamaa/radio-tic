@@ -152,6 +152,11 @@ export function addRequest(roomCode, { nickname, videoId, title, thumbnailUrl })
     return getState(roomCode);
   }
 
+  // Límite de cola: Máximo 10 canciones en espera
+  if (queue.length >= 10) {
+    return { error: "La cola está llena (máximo 10 canciones)" };
+  }
+
   if (!nowPlaying) {
     room.nowPlaying = item;
     room.startedAt = Date.now();

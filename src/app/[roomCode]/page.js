@@ -310,6 +310,9 @@ export default function Room() {
       if (Object.prototype.hasOwnProperty.call(data, "startedAt")) {
         setStartedAt(data.startedAt);
       }
+    } else {
+      const data = await res.json();
+      alert(data.error || "Error al añadir a la cola");
     }
     setRequestingId(null);
   }
@@ -456,12 +459,10 @@ export default function Room() {
       <header className="sticky top-0 z-50 border-b border-zinc-200/50 dark:border-zinc-800/50 bg-white/70 dark:bg-black/70 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-violet-500/20">
-                R
+              <div className="flex items-center gap-3">
+                <img src="/Image_6.png" alt="Radio Logo" className="w-10 h-10 object-contain drop-shadow-lg" />
+                <h1 className="text-xl font-bold tracking-tight hidden sm:block">Radio SharshaSoft</h1>
               </div>
-              <h1 className="text-xl font-bold tracking-tight hidden sm:block">Radio ShiarshaSoft</h1>
-            </div>
             <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
               <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Sala</span>
               <code className="text-sm font-mono font-bold text-zinc-900 dark:text-zinc-100">{roomCode}</code>
